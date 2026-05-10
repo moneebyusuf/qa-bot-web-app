@@ -1,0 +1,14 @@
+gradio
+langchain
+langchain-community
+langchain-ibm
+ibm-watsonx-ai
+chromadb
+pypdf
+python-dotenv
+playwright
+pytest
+openai
+google-genai
+anthropic
+requests
