@@ -22,6 +22,7 @@ def analyze_page(url: str):
         "broken_links": [],
         "review_links": [],
         "working_links": [],
+        "qa_score": 100,
     }
 
     with sync_playwright() as p:
@@ -79,7 +80,10 @@ def analyze_page(url: str):
 
                 if not alt:
                     analysis["images_without_alt"].append(src)
-            check_links_status(analysis)        
+            check_links_status(analysis)
+            
+            
+            analysis["qa_score"] = calculate_qa_score(analysis)        
             analysis["issues"] = detect_issues(analysis)
             analysis["generated_test_cases"] = generate_test_cases_from_analysis(analysis)
 
@@ -198,6 +202,29 @@ def generate_test_cases_from_analysis(analysis):
         })
 
     return test_cases
+
+def calculate_qa_score(analysis):
+    score = 100
+
+    if not analysis.get("title"):
+        score -= 10
+
+    if len(analysis.get("broken_links", [])) > 0:
+        score -= min(30, len(analysis.get("broken_links", [])) * 10)
+
+    if len(analysis.get("images_without_alt", [])) > 0:
+        score -= min(20, len(analysis.get("images_without_alt", [])) * 5)
+
+    if analysis.get("forms_count", 0) > 0 and len(analysis.get("inputs", [])) == 0:
+        score -= 15
+
+    if len(analysis.get("buttons", [])) == 0:
+        score -= 5
+
+    if len(analysis.get("links", [])) == 0:
+        score -= 10
+
+    return max(score, 0)
 
 def detect_issues(analysis):
     issues = []

@@ -59,7 +59,8 @@ def format_page_analysis(url, analysis=None):
     if "error" in analysis:
         return f"Error while analyzing page:\n\n{analysis['error']}"
 
-    score, score_issues = calculate_qa_score(analysis)
+    score = analysis.get("qa_score", 0)
+    score_issues = []
 
     forms_count = analysis.get("forms_count", 0)
     inputs = analysis.get("inputs", [])
