@@ -319,3 +319,102 @@ def check_sample_links(page, base_url, max_links=10):
         "checked_count": checked_count,
         "broken_count": broken_count,
     }
+    
+def generate_pytest_file(url: str):
+    os.makedirs("reports", exist_ok=True)
+
+    safe_name = (
+        url.replace("https://", "")
+        .replace("http://", "")
+        .replace("/", "_")
+        .replace(".", "_")
+        .replace(":", "_")
+        .replace("?", "_")
+        .replace("&", "_")
+        .replace("=", "_")
+    )
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_path = f"reports/test_generated_{safe_name}_{timestamp}.py"
+
+    pytest_code = f'''"""
+Auto-generated Playwright pytest file.
+Generated for: {url}
+
+Run with:
+    pytest {file_path}
+"""
+
+from playwright.sync_api import sync_playwright
+
+
+URL = "{url}"
+
+
+def test_page_loads_successfully():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        response = page.goto(URL, timeout=30000, wait_until="domcontentloaded")
+
+        assert response is not None, "No response received from page"
+        assert response.status < 400, f"Page returned status code {{response.status}}"
+
+        browser.close()
+
+
+def test_page_title_exists():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(URL, timeout=30000, wait_until="domcontentloaded")
+
+        title = page.title()
+        assert title and title.strip(), "Page title is missing"
+
+        browser.close()
+
+
+def test_links_exist():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(URL, timeout=30000, wait_until="domcontentloaded")
+
+        links_count = page.locator("a[href]").count()
+        assert links_count > 0, "No navigation links found"
+
+        browser.close()
+
+
+def test_images_have_alt_text():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(URL, timeout=30000, wait_until="domcontentloaded")
+
+        missing_alt_count = page.locator("img:not([alt]), img[alt='']").count()
+        assert missing_alt_count == 0, f"{{missing_alt_count}} image(s) missing alt text"
+
+        browser.close()
+
+
+def test_forms_have_inputs_if_present():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(URL, timeout=30000, wait_until="domcontentloaded")
+
+        forms_count = page.locator("form").count()
+        inputs_count = page.locator("input, textarea, select").count()
+
+        if forms_count > 0:
+            assert inputs_count > 0, "Forms found but no input fields detected"
+
+        browser.close()
+'''
+
+    with open(file_path, "w", encoding="utf-8") as file:
+        file.write(pytest_code)
+
+    return file_path

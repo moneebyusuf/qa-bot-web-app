@@ -2,7 +2,7 @@ import gradio as gr
 
 from app.automation.page_analyzer import analyze_page, save_analysis_report, save_html_report
 from app.automation.playwright_runner import run_basic_website_test
-from app.automation.smart_test_runner import run_smart_tests
+from app.automation.smart_test_runner import run_smart_tests, generate_pytest_file
 
 def format_test_results(url):
     if not url:
@@ -324,15 +324,16 @@ def format_smart_test_results(results):
 
 def run_smart_test_runner_ui(url):
     if not url:
-        return "Please enter a website URL.", None, None
+        return "Please enter a website URL.", None, None, None
 
     results = run_smart_tests(url)
 
     report_text = format_smart_test_results(results)
     report_file = results.get("report_path")
     screenshot_path = results.get("screenshot_path")
+    pytest_file = generate_pytest_file(url)
 
-    return report_text, report_file, screenshot_path
+    return report_text, report_file, screenshot_path, pytest_file
 
 
 def create_app():
@@ -395,15 +396,17 @@ def create_app():
                     type="filepath"
                 )
 
+                smart_runner_pytest_file = gr.File(label="Download Generated Pytest File")
+
                 smart_runner_button.click(
                     fn=run_smart_test_runner_ui,
                     inputs=smart_runner_url_input,
                     outputs=[
                         smart_runner_output,
                         smart_runner_report_file,
-                        smart_runner_screenshot
+                        smart_runner_screenshot,
+                        smart_runner_pytest_file
                     ]
-                
                 )
         with gr.Tab("Smart Page Analyzer"):
             analyzer_url_input = gr.Textbox(
