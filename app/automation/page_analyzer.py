@@ -16,6 +16,7 @@ def analyze_page(url: str):
         "generated_test_cases": [],
         "issues": [],
         "broken_links": [],
+        "review_links": [],
         "working_links": [],
     }
 
@@ -269,43 +270,70 @@ def check_links_status(analysis):
     base_url = analysis["url"]
 
     headers = {
-        "User-Agent": "Mozilla/5.0 QA-Bot-Link-Checker"
+        "User-Agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
     }
 
     for link in analysis["links"]:
         href = link.get("href", "")
 
-        if not href or href.startswith("#") or href.startswith("javascript:"):
+        if (
+            not href
+            or href.startswith("#")
+            or href.startswith("javascript:")
+            or href.startswith("mailto:")
+            or href.startswith("tel:")
+        ):
             continue
 
         full_url = urljoin(base_url, href)
 
         try:
+            method_used = "HEAD"
+
             response = requests.head(
                 full_url,
-                timeout=5,
+                timeout=8,
                 allow_redirects=True,
                 headers=headers
             )
 
-            if response.status_code in [400, 403, 405]:
+            if response.status_code in [400, 401, 403, 405, 429]:
+                method_used = "GET"
+
                 response = requests.get(
                     full_url,
-                    timeout=8,
+                    timeout=12,
                     allow_redirects=True,
                     headers=headers
                 )
 
-            if response.status_code >= 400:
-                analysis["broken_links"].append({
-                    "url": full_url,
-                    "status_code": response.status_code
-                })
+            result = {
+                "url": full_url,
+                "status_code": response.status_code,
+                "method": method_used
+            }
+
+            # 401 / 403 / 429 غالبًا معناها الموقع منع الفحص الآلي، مش إن الرابط مكسور
+            if response.status_code in [401, 403, 429]:
+                result["note"] = "Blocked by website, not necessarily broken"
+                analysis["working_links"].append(result)
+
+            # 400 بعد GET في مواقع كبيرة مثل GitHub قد يكون بسبب bot protection
+            elif response.status_code == 400 and method_used == "GET":
+                result["note"] = "Automated check returned 400; manual review recommended"
+                analysis["working_links"].append(result)
+
+            elif response.status_code >= 400:
+                analysis["broken_links"].append(result)
+
             else:
-                analysis["working_links"].append({
-                    "url": full_url,
-                    "status_code": response.status_code
-                })
+                analysis["working_links"].append(result)
 
         except Exception as error:
             analysis["broken_links"].append({
