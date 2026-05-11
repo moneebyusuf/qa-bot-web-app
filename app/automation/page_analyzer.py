@@ -1,9 +1,11 @@
-from playwright.sync_api import sync_playwright
-import os
 import json
+import os
 from datetime import datetime
-import requests
 from urllib.parse import urljoin
+
+import requests
+from playwright.sync_api import sync_playwright
+
 
 def analyze_page(url: str):
     analysis = {
@@ -332,12 +334,10 @@ def check_links_status(analysis):
                 "method": method_used
             }
 
-            # 401 / 403 / 429 غالبًا معناها الموقع منع الفحص الآلي، مش إن الرابط مكسور
             if response.status_code in [401, 403, 429]:
                 result["note"] = "Blocked by website, not necessarily broken"
                 analysis["working_links"].append(result)
 
-            # 400 بعد GET في مواقع كبيرة مثل GitHub قد يكون بسبب bot protection
             elif response.status_code == 400 and method_used == "GET":
                 result["note"] = "Automated check returned 400; manual review recommended"
                 analysis["working_links"].append(result)
@@ -353,3 +353,191 @@ def check_links_status(analysis):
                 "url": full_url,
                 "error": str(error)
             })
+            
+def save_html_report(analysis):
+    os.makedirs("reports", exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_path = f"reports/qa_report_{timestamp}.html"
+
+    title = analysis.get("title", "N/A")
+    url = analysis.get("url", "N/A")
+    forms_count = analysis.get("forms_count", 0)
+    inputs = analysis.get("inputs", [])
+    buttons = analysis.get("buttons", [])
+    links = analysis.get("links", [])
+    working_links = analysis.get("working_links", [])
+    broken_links = analysis.get("broken_links", [])
+    images_without_alt = analysis.get("images_without_alt", [])
+    issues = analysis.get("issues", [])
+    test_cases = analysis.get("generated_test_cases", [])
+    screenshot_path = analysis.get("screenshot_path", "")
+
+    html = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart QA Report</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: #f6f8fa;
+            color: #24292f;
+        }}
+        .container {{
+            max-width: 1100px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+        }}
+        h1, h2, h3 {{
+            color: #0969da;
+        }}
+        .score {{
+            font-size: 28px;
+            font-weight: bold;
+            padding: 15px;
+            background: #ddf4ff;
+            border-left: 6px solid #0969da;
+            margin: 20px 0;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }}
+        th, td {{
+            border: 1px solid #d0d7de;
+            padding: 10px;
+            text-align: left;
+        }}
+        th {{
+            background: #f6f8fa;
+        }}
+        .issue {{
+            border-left: 5px solid #d1242f;
+            padding: 12px;
+            background: #fff1f1;
+            margin-bottom: 12px;
+        }}
+        .test-case {{
+            border-left: 5px solid #1a7f37;
+            padding: 12px;
+            background: #dafbe1;
+            margin-bottom: 12px;
+        }}
+        .screenshot {{
+            max-width: 100%;
+            border: 1px solid #d0d7de;
+            border-radius: 8px;
+            margin-top: 15px;
+        }}
+        code {{
+            background: #f6f8fa;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }}
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Smart QA Page Analysis Report</h1>
+
+    <h2>Page Info</h2>
+    <p><strong>URL:</strong> {url}</p>
+    <p><strong>Title:</strong> {title}</p>
+
+    <div class="score">QA Score: {analysis.get("qa_score", "Calculated in UI")}/100</div>
+
+    <h2>Summary</h2>
+    <table>
+        <tr><th>Metric</th><th>Count</th></tr>
+        <tr><td>Forms Found</td><td>{forms_count}</td></tr>
+        <tr><td>Inputs Found</td><td>{len(inputs)}</td></tr>
+        <tr><td>Buttons Found</td><td>{len(buttons)}</td></tr>
+        <tr><td>Links Found</td><td>{len(links)}</td></tr>
+        <tr><td>Working Links</td><td>{len(working_links)}</td></tr>
+        <tr><td>Broken Links</td><td>{len(broken_links)}</td></tr>
+        <tr><td>Images Missing Alt Text</td><td>{len(images_without_alt)}</td></tr>
+    </table>
+
+    <h2>Broken Links</h2>
+"""
+
+    if broken_links:
+        html += "<ul>"
+        for link in broken_links:
+            html += f"<li>{link.get('url')} - Status: {link.get('status_code', link.get('error', 'N/A'))}</li>"
+        html += "</ul>"
+    else:
+        html += "<p>No broken links detected.</p>"
+
+    html += """
+    <h2>Detected Issues</h2>
+"""
+
+    if issues:
+        for issue in issues:
+            html += f"""
+            <div class="issue">
+                <h3>{issue.get('severity', 'Info')} - {issue.get('category', 'General')}</h3>
+                <p><strong>Issue:</strong> {issue.get('issue', '')}</p>
+                <p><strong>Recommendation:</strong> {issue.get('recommendation', '')}</p>
+            </div>
+            """
+    else:
+        html += "<p>No major issues detected.</p>"
+
+    html += """
+    <h2>Auto-Generated QA Test Cases</h2>
+"""
+
+    if test_cases:
+        for index, test_case in enumerate(test_cases, start=1):
+            html += f"""
+            <div class="test-case">
+                <h3>{index}. {test_case.get('title', 'Untitled Test Case')}</h3>
+                <p><strong>Priority:</strong> {test_case.get('priority', 'Medium')}</p>
+                <p><strong>Steps:</strong></p>
+                <ol>
+            """
+
+            for step in test_case.get("steps", []):
+                html += f"<li>{step}</li>"
+
+            html += f"""
+                </ol>
+                <p><strong>Expected Result:</strong> {test_case.get('expected_result', '')}</p>
+            </div>
+            """
+    else:
+        html += "<p>No test cases generated.</p>"
+
+    if screenshot_path:
+        html += f"""
+        <h2>Page Screenshot</h2>
+        <p><code>{screenshot_path}</code></p>
+        <img class="screenshot" src="../{screenshot_path}" alt="Page screenshot">
+        """
+
+    html += """
+    <h2>Recommendation</h2>
+    <ul>
+        <li>Fix broken links first.</li>
+        <li>Add alt text to images that are missing accessibility text.</li>
+        <li>Test forms with valid and invalid data.</li>
+        <li>Re-run the analyzer after making fixes.</li>
+    </ul>
+</div>
+</body>
+</html>
+"""
+
+    with open(file_path, "w", encoding="utf-8") as file:
+        file.write(html)
+
+    return file_path

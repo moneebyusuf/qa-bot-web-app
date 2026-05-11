@@ -1,6 +1,6 @@
 import gradio as gr
 
-from app.automation.page_analyzer import analyze_page, save_analysis_report
+from app.automation.page_analyzer import analyze_page, save_analysis_report, save_html_report
 from app.automation.playwright_runner import run_basic_website_test
 
 def format_test_results(url):
@@ -262,18 +262,19 @@ def generate_test_cases(provider, feature_description):
 
 def analyze_page_and_export(url):
     if not url:
-        return "Please enter a website URL.", None, None
+        return "Please enter a website URL.", None, None, None
 
     analysis = analyze_page(url)
 
     if "error" in analysis:
-        return f"Error while analyzing page:\n\n{analysis['error']}", None, None
+        return f"Error while analyzing page:\n\n{analysis['error']}", None, None, None
 
     report_text = format_page_analysis(url, analysis)
-    file_path = save_analysis_report(analysis)
+    json_file_path = save_analysis_report(analysis)
+    html_file_path = save_html_report(analysis)
     screenshot_path = analysis.get("screenshot_path")
 
-    return report_text, file_path, screenshot_path
+    return report_text, json_file_path, html_file_path, screenshot_path
 
 def create_app():
     with gr.Blocks(title="AI QA Automation Platform") as demo:
@@ -328,7 +329,8 @@ def create_app():
 
             analysis_output = gr.Markdown(label="Analysis Result")
 
-            report_file = gr.File(label="Download JSON Report")
+            json_report_file = gr.File(label="Download JSON Report")
+            html_report_file = gr.File(label="Download HTML Report")
 
             screenshot_output = gr.Image(
                 label="Page Screenshot",
@@ -338,7 +340,12 @@ def create_app():
             analyze_button.click(
                 fn=analyze_page_and_export,
                 inputs=analyzer_url_input,
-                outputs=[analysis_output, report_file, screenshot_output]
+                outputs=[
+                    analysis_output,
+                    json_report_file,
+                    html_report_file,
+                    screenshot_output
+                ]
             )
 
     return demo
