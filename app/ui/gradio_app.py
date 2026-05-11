@@ -1,8 +1,7 @@
 import gradio as gr
-from app.automation.page_analyzer import analyze_page
-from app.automation.playwright_runner import run_basic_website_test
-from app.automation.page_analyzer import analyze_page, save_analysis_report
 
+from app.automation.page_analyzer import analyze_page, save_analysis_report
+from app.automation.playwright_runner import run_basic_website_test
 
 def format_test_results(url):
     if not url:
@@ -50,81 +49,143 @@ def calculate_qa_score(analysis):
     return score, issues
 
 
-def format_page_analysis(url):
+def format_page_analysis(url, analysis=None):
     if not url:
         return "Please enter a website URL."
 
-    analysis = analyze_page(url)
+    if analysis is None:
+        analysis = analyze_page(url)
 
     if "error" in analysis:
         return f"Error while analyzing page:\n\n{analysis['error']}"
 
-    score, issues = calculate_qa_score(analysis)
+    score, score_issues = calculate_qa_score(analysis)
 
-    output = "# Smart Page Analysis Report\n\n"
+    forms_count = analysis.get("forms_count", 0)
+    inputs = analysis.get("inputs", [])
+    buttons = analysis.get("buttons", [])
+    links = analysis.get("links", [])
+    working_links = analysis.get("working_links", [])
+    broken_links = analysis.get("broken_links", [])
+    images_without_alt = analysis.get("images_without_alt", [])
+    issues = analysis.get("issues", [])
+    generated_test_cases = analysis.get("generated_test_cases", [])
+
+    output = "# Smart QA Page Analysis Report\n\n"
+
+    output += "## Page Info\n\n"
+    output += f"**URL:** {analysis.get('url', url)}\n\n"
+    output += f"**Title:** {analysis.get('title', 'N/A')}\n\n"
+    output += f"**QA Score:** {score}/100\n\n"
+
+    output += "---\n\n"
 
     output += "## Summary\n\n"
-    output += f"**URL:** {analysis['url']}\n\n"
-    output += f"**Page Title:** {analysis['title']}\n\n"
-    output += f"**QA Score:** {score}/100\n\n"
-    output += f"**Forms Found:** {analysis['forms_count']}\n\n"
-    output += f"**Inputs Found:** {len(analysis['inputs'])}\n\n"
-    output += f"**Buttons Found:** {len(analysis['buttons'])}\n\n"
-    output += f"**Links Found:** {len(analysis['links'])}\n\n"
-    output += f"**Working Links:** {len(analysis.get('working_links', []))}\n\n"
-    output += f"**Broken Links:** {len(analysis.get('broken_links', []))}\n\n"
-    output += f"**Images Missing Alt Text:** {len(analysis['images_without_alt'])}\n\n"
+    output += "| Metric | Count |\n"
+    output += "|---|---:|\n"
+    output += f"| Forms Found | {forms_count} |\n"
+    output += f"| Inputs Found | {len(inputs)} |\n"
+    output += f"| Buttons Found | {len(buttons)} |\n"
+    output += f"| Links Found | {len(links)} |\n"
+    output += f"| Working Links | {len(working_links)} |\n"
+    output += f"| Broken Links | {len(broken_links)} |\n"
+    output += f"| Images Missing Alt Text | {len(images_without_alt)} |\n\n"
+
+    output += "---\n\n"
+
+    output += "## Broken Links\n\n"
+
+    if broken_links:
+        for link in broken_links:
+            link_url = link.get("url", "N/A")
+            status_code = link.get("status_code")
+            error = link.get("error")
+
+            if status_code:
+                output += f"- {link_url} | Status: {status_code}\n"
+            elif error:
+                output += f"- {link_url} | Error: {error}\n"
+            else:
+                output += f"- {link_url}\n"
+    else:
+        output += "No broken links detected.\n"
+
+    output += "\n---\n\n"
+
+    output += "## Accessibility Issues\n\n"
+
+    accessibility_issues = [
+        issue for issue in issues
+        if issue.get("category") == "Accessibility"
+    ]
+
+    if accessibility_issues:
+        for issue in accessibility_issues:
+            output += f"### {issue.get('category', 'Accessibility')} - {issue.get('severity', 'Info')}\n\n"
+            output += f"**Issue:** {issue.get('issue', '')}\n\n"
+            output += f"**Recommendation:** {issue.get('recommendation', '')}\n\n"
+    elif images_without_alt:
+        output += f"- {len(images_without_alt)} images are missing alt text.\n"
+    else:
+        output += "No accessibility issues detected.\n"
+
+    output += "\n---\n\n"
 
     output += "## Detected Issues\n\n"
 
-    if analysis.get("issues"):
-        for issue in analysis["issues"]:
-            output += f"### {issue['severity']} - {issue['category']}\n"
-            output += f"**Issue:** {issue['issue']}\n\n"
-            output += f"**Recommendation:** {issue['recommendation']}\n\n"
+    if issues:
+        for issue in issues:
+            output += f"### {issue.get('severity', 'Info')} - {issue.get('category', 'General')}\n\n"
+            output += f"**Issue:** {issue.get('issue', '')}\n\n"
+            output += f"**Recommendation:** {issue.get('recommendation', '')}\n\n"
+    elif score_issues:
+        for issue in score_issues:
+            output += f"- {issue}\n"
     else:
         output += "No major issues detected.\n"
 
-    output += "\n## Inputs Found\n\n"
-    if analysis["inputs"]:
-        for input_item in analysis["inputs"]:
+    output += "\n---\n\n"
+
+    output += "## Inputs Found\n\n"
+
+    if inputs:
+        for input_item in inputs:
             output += (
-                f"- Type: `{input_item['type']}`, "
-                f"Name: `{input_item['name']}`, "
-                f"Placeholder: `{input_item['placeholder']}`\n"
+                f"- Type: `{input_item.get('type', '')}`, "
+                f"Name: `{input_item.get('name', '')}`, "
+                f"Placeholder: `{input_item.get('placeholder', '')}`\n"
             )
     else:
         output += "No inputs found.\n"
 
-    output += "\n## Buttons Found\n\n"
-    if analysis["buttons"]:
-        for button in analysis["buttons"]:
+    output += "\n---\n\n"
+
+    output += "## Buttons Found\n\n"
+
+    if buttons:
+        for button in buttons:
             output += f"- {button}\n"
     else:
         output += "No buttons found.\n"
-        output += "\n## Broken Links\n\n"
-    if analysis.get("broken_links"):
-        for link in analysis["broken_links"]:
-            output += f"- {link['url']} "
-            if "status_code" in link:
-                output += f"(Status: {link['status_code']})\n"
-            else:
-                output += f"(Error: {link['error']})\n"
+
+    output += "\n---\n\n"
+
+    output += "## Auto-Generated QA Test Cases\n\n"
+
+    if generated_test_cases:
+        for index, test_case in enumerate(generated_test_cases, start=1):
+            output += f"### {index}. {test_case.get('title', 'Untitled Test Case')}\n\n"
+            output += f"**Priority:** {test_case.get('priority', 'Medium')}\n\n"
+
+            output += "**Steps:**\n"
+            for step in test_case.get("steps", []):
+                output += f"- {step}\n"
+
+            output += f"\n**Expected Result:** {test_case.get('expected_result', '')}\n\n"
     else:
-        output += "No broken links detected.\n"
-    output += "\n## Accessibility Issues\n\n"
-    output += f"- Images without alt text: {len(analysis['images_without_alt'])}\n"
+        output += "No test cases generated.\n"
 
-    output += "\n## Auto-Generated QA Test Cases\n\n"
-    for index, test_case in enumerate(analysis["generated_test_cases"], start=1):
-        output += f"### {index}. {test_case['title']}\n"
-        output += f"**Priority:** {test_case['priority']}\n\n"
-
-        output += "**Steps:**\n"
-        for step in test_case["steps"]:
-            output += f"- {step}\n"
-
-        output += f"\n**Expected Result:** {test_case['expected_result']}\n\n"
+    output += "\n---\n\n"
 
     output += "## Recommendation\n\n"
 
@@ -134,6 +195,12 @@ def format_page_analysis(url):
         output += "The page is acceptable, but some improvements are recommended.\n"
     else:
         output += "The page needs QA improvements before release.\n"
+
+    output += "\n\nRecommended next actions:\n\n"
+    output += "- Fix broken links first.\n"
+    output += "- Add alt text to images that are missing accessibility text.\n"
+    output += "- Test forms with valid and invalid data.\n"
+    output += "- Re-run the analyzer after making fixes.\n"
 
     return output
 
@@ -202,7 +269,7 @@ def analyze_page_and_export(url):
     if "error" in analysis:
         return f"Error while analyzing page:\n\n{analysis['error']}", None
 
-    report_text = format_page_analysis(url)
+    report_text = format_page_analysis(url, analysis)
     file_path = save_analysis_report(analysis)
 
     return report_text, file_path
@@ -269,3 +336,7 @@ def create_app():
             )
 
     return demo
+
+if __name__ == "__main__":
+    demo = create_app()
+    demo.launch()
