@@ -1,4 +1,5 @@
 from playwright.sync_api import sync_playwright
+import os
 import json
 from datetime import datetime
 import requests
@@ -8,6 +9,7 @@ def analyze_page(url: str):
     analysis = {
         "url": url,
         "title": "",
+        "screenshot_path": "",
         "inputs": [],
         "buttons": [],
         "links": [],
@@ -26,8 +28,17 @@ def analyze_page(url: str):
 
         try:
             page.goto(url, timeout=30000)
+            page.wait_for_load_state("networkidle", timeout=15000)
 
             analysis["title"] = page.title()
+            os.makedirs("reports", exist_ok=True)
+
+            screenshot_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            screenshot_path = f"reports/screenshot_{screenshot_timestamp}.png"
+
+            page.screenshot(path=screenshot_path, full_page=True)
+
+            analysis["screenshot_path"] = screenshot_path
 
             inputs = page.locator("input").all()
             buttons = page.locator("button").all()
@@ -258,6 +269,8 @@ def detect_issues(analysis):
     return issues
 
 def save_analysis_report(analysis):
+    os.makedirs("reports", exist_ok=True)
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_path = f"reports/qa_report_{timestamp}.json"
 

@@ -262,17 +262,18 @@ def generate_test_cases(provider, feature_description):
 
 def analyze_page_and_export(url):
     if not url:
-        return "Please enter a website URL.", None
+        return "Please enter a website URL.", None, None
 
     analysis = analyze_page(url)
 
     if "error" in analysis:
-        return f"Error while analyzing page:\n\n{analysis['error']}", None
+        return f"Error while analyzing page:\n\n{analysis['error']}", None, None
 
     report_text = format_page_analysis(url, analysis)
     file_path = save_analysis_report(analysis)
+    screenshot_path = analysis.get("screenshot_path")
 
-    return report_text, file_path
+    return report_text, file_path, screenshot_path
 
 def create_app():
     with gr.Blocks(title="AI QA Automation Platform") as demo:
@@ -329,10 +330,15 @@ def create_app():
 
             report_file = gr.File(label="Download JSON Report")
 
+            screenshot_output = gr.Image(
+                label="Page Screenshot",
+                type="filepath"
+            )
+
             analyze_button.click(
                 fn=analyze_page_and_export,
                 inputs=analyzer_url_input,
-                outputs=[analysis_output, report_file]
+                outputs=[analysis_output, report_file, screenshot_output]
             )
 
     return demo
