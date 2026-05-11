@@ -2,6 +2,7 @@ import gradio as gr
 
 from app.automation.page_analyzer import analyze_page, save_analysis_report, save_html_report
 from app.automation.playwright_runner import run_basic_website_test
+from app.automation.smart_test_runner import run_smart_tests
 
 def format_test_results(url):
     if not url:
@@ -277,6 +278,63 @@ def analyze_page_and_export(url):
 
     return report_text, json_file_path, html_file_path, screenshot_path
 
+
+def format_smart_test_results(results):
+    if not results:
+        return "No test results."
+
+    summary = results.get("summary", {})
+
+    output = "# Smart Test Runner Report\n\n"
+
+    output += f"**URL:** {results.get('url', 'N/A')}\n\n"
+    output += f"**Timestamp:** {results.get('timestamp', 'N/A')}\n\n"
+
+    output += "## Summary\n\n"
+    output += "| Metric | Count |\n"
+    output += "|---|---:|\n"
+    output += f"| Total Tests | {summary.get('total', 0)} |\n"
+    output += f"| Passed | {summary.get('passed', 0)} |\n"
+    output += f"| Failed | {summary.get('failed', 0)} |\n"
+    output += f"| Warnings | {summary.get('warnings', 0)} |\n\n"
+
+    output += "---\n\n"
+    output += "## Test Results\n\n"
+
+    for test in results.get("tests", []):
+        status = test.get("status", "unknown")
+
+        if status == "passed":
+            icon = "✅"
+        elif status == "failed":
+            icon = "❌"
+        elif status == "warning":
+            icon = "⚠️"
+        else:
+            icon = "ℹ️"
+
+        output += f"### {icon} {test.get('name', 'Unnamed Test')}\n\n"
+        output += f"**Status:** {status.upper()}\n\n"
+        output += f"**Severity:** {test.get('severity', 'N/A')}\n\n"
+        output += f"**Details:** {test.get('details', '')}\n\n"
+        output += f"**Recommendation:** {test.get('recommendation', '')}\n\n"
+
+    return output
+
+
+def run_smart_test_runner_ui(url):
+    if not url:
+        return "Please enter a website URL.", None, None
+
+    results = run_smart_tests(url)
+
+    report_text = format_smart_test_results(results)
+    report_file = results.get("report_path")
+    screenshot_path = results.get("screenshot_path")
+
+    return report_text, report_file, screenshot_path
+
+
 def create_app():
     with gr.Blocks(title="AI QA Automation Platform") as demo:
         gr.Markdown("# AI QA Automation Platform")
@@ -320,6 +378,33 @@ def create_app():
                 inputs=url_input,
                 outputs=result_output
             )
+            with gr.Tab("Smart Test Runner"):
+                smart_runner_url_input = gr.Textbox(
+                    label="Website URL",
+                    placeholder="https://example.com"
+                )
+
+                smart_runner_button = gr.Button("Run Smart Tests")
+
+                smart_runner_output = gr.Markdown(label="Smart Test Results")
+
+                smart_runner_report_file = gr.File(label="Download Smart Test JSON Report")
+
+                smart_runner_screenshot = gr.Image(
+                    label="Smart Test Screenshot",
+                    type="filepath"
+                )
+
+                smart_runner_button.click(
+                    fn=run_smart_test_runner_ui,
+                    inputs=smart_runner_url_input,
+                    outputs=[
+                        smart_runner_output,
+                        smart_runner_report_file,
+                        smart_runner_screenshot
+                    ]
+                
+                )
         with gr.Tab("Smart Page Analyzer"):
             analyzer_url_input = gr.Textbox(
                 label="Website URL",
